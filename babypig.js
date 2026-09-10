@@ -6,18 +6,41 @@ const roseText = document.getElementById('rose-text');
 let width = canvas.width = window.innerWidth;
 let height = canvas.height = window.innerHeight;
 
+// TÍNH TOÁN KÍCH THƯỚC VÀ ĐỘ NGHIÊNG RESPONSIVE CHO THIÊN HÀ
+function getGalaxyScale() {
+    const minSize = Math.min(width, height);
+    return {
+        // Bán kính tối đa linh hoạt theo màn hình
+        maxRadius: width < 600 ? minSize * 0.42 : minSize * 0.45,
+        // Màn hình dọc (điện thoại) thì độ nghiêng gom gọn hơn
+        tiltY: width < 600 ? 0.48 : 0.55
+    };
+}
+
 function getHeartScale() {
     const minSize = Math.min(width, height);
     return width < 600 ? minSize / 38 : minSize / 45;
 }
 
 let heartScale = getHeartScale();
+let galaxyScale = getGalaxyScale();
 
 window.addEventListener('resize', () => {
     width = canvas.width = window.innerWidth;
     height = canvas.height = window.innerHeight;
     heartScale = getHeartScale();
-    initParticles();
+    galaxyScale = getGalaxyScale();
+
+    // Nếu đang ở trạng thái Thiên Hà, cập nhật lại tọa độ đích cho mượt mà không bị giật
+    if (state === 'FORMING_GALAXY') {
+        galaxyTargets = generateGalaxyTargets(particles.length);
+        particles.forEach((p, idx) => {
+            p.galaxyData = galaxyTargets[idx];
+            p.color = galaxyTargets[idx].color;
+        });
+    } else {
+        initParticles();
+    }
 });
 
 // 1. DỰNG TỌA ĐỘ TRÁI TIM
@@ -27,10 +50,10 @@ function getHeartPosition(t) {
     return { x, y };
 }
 
-// 2. TẠO THIÊN HÀ & CÁC VÌ SAO VŨ TRỤ
+// 2. TẠO THIÊN HÀ & CÁC VÌ SAO VŨ TRỤ (RESPONSIVE)
 function generateGalaxyTargets(count) {
     const targets = [];
-    const maxRadius = Math.max(width, height) * 0.45;
+    const maxRadius = galaxyScale.maxRadius;
 
     const galaxyColors = [
         '#ffffff', '#ffe6ff', '#e60073', '#9933ff',
@@ -62,7 +85,7 @@ function generateGalaxyTargets(count) {
 
         } else {
             isBgStar = true;
-            dist = Math.random() * Math.max(width, height) * 0.6;
+            dist = Math.random() * Math.max(width, height) * 0.55;
             baseAngle = Math.random() * Math.PI * 2;
             color = galaxyColors[Math.floor(Math.random() * galaxyColors.length)];
         }
@@ -101,8 +124,7 @@ class Particle {
         this.angle = Math.random() * Math.PI * 2;
         this.radius = Math.max(width, height) * (0.5 + Math.random() * 0.6);
 
-        // ĐIỀU CHỈNH THỜI GIAN XOÁY: Tinh chỉnh vừa đủ nhịp nhàng (~2.5 đến 3 giây)
-        const durationFrames = 150 + Math.random() * 40;
+        const durationFrames = 140 + Math.random() * 40;
         this.speed = 1 / durationFrames;
         this.totalRotations = (3.5 + Math.random() * 1.5) * Math.PI * 2;
 
@@ -142,7 +164,7 @@ class Particle {
 
         const currentAngle = target.baseAngle + galaxyRotation;
         this.targetX = width / 2 + Math.cos(currentAngle) * target.dist;
-        this.targetY = height / 2 + Math.sin(currentAngle) * target.dist * 0.55;
+        this.targetY = height / 2 + Math.sin(currentAngle) * target.dist * galaxyScale.tiltY;
 
         this.angle = Math.atan2(this.startY - height / 2, this.startX - width / 2);
         this.radius = Math.hypot(this.startX - width / 2, this.startY - height / 2);
@@ -159,7 +181,6 @@ class Particle {
                 this.progress += this.speed;
                 if (this.progress > 1) this.progress = 1;
 
-                // Hàm Ease-Out mượt mà giúp hạt bay cuốn từ từ chạm đích nhẹ nhàng
                 const ease = 1 - Math.pow(1 - this.progress, 3);
 
                 const currentRadius = this.radius * (1 - ease);
@@ -200,14 +221,15 @@ class Particle {
 
                 const angleNow = this.galaxyData.baseAngle + galaxyRotation;
                 const curTargetX = width / 2 + Math.cos(angleNow) * this.galaxyData.dist;
-                const curTargetY = height / 2 + Math.sin(angleNow) * this.galaxyData.dist * 0.55;
+                const curTargetY = height / 2 + Math.sin(angleNow) * this.galaxyData.dist * galaxyScale.tiltY;
 
                 this.x = vortexX * (1 - ease) + curTargetX * ease;
                 this.y = vortexY * (1 - ease) + curTargetY * ease;
             } else {
+                // TỰ ĐỘNG RESPONSIVE TỌA ĐỘ KHI THIÊN HÀ DANG XOAY
                 const angleNow = this.galaxyData.baseAngle + galaxyRotation;
                 this.x = width / 2 + Math.cos(angleNow) * this.galaxyData.dist;
-                this.y = height / 2 + Math.sin(angleNow) * this.galaxyData.dist * 0.55;
+                this.y = height / 2 + Math.sin(angleNow) * this.galaxyData.dist * galaxyScale.tiltY;
 
                 this.alpha += Math.sin(Date.now() * 0.004 + this.index) * 0.02;
                 if (this.alpha < 0.2) this.alpha = 0.2;
@@ -221,10 +243,9 @@ class Particle {
         ctx.globalAlpha = this.alpha;
         ctx.fillStyle = this.color;
 
-        // Tắt hẳn bóng mờ khi dựng hình để mượt 60fps, chỉ bật nhẹ khi thành ngân hà
         if (state === 'FORMING_GALAXY') {
             ctx.shadowColor = this.color;
-            ctx.shadowBlur = 3;
+            ctx.shadowBlur = width < 600 ? 2 : 4;
         }
 
         ctx.beginPath();
@@ -279,6 +300,7 @@ function animate() {
 
     if (state === 'EXPLODING' && allFinished) {
         state = 'FORMING_GALAXY';
+        galaxyTargets = generateGalaxyTargets(particles.length);
         particles.forEach(p => p.setupGalaxyTarget());
         if (roseText) roseText.classList.remove('hidden');
     }
