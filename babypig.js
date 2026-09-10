@@ -244,7 +244,7 @@ function initParticles() {
     pigBtn.classList.add('hidden');
 
     if (roseText) {
-        roseText.innerHTML = "bé heo con cóa thít hăm 💓💓💓";
+        roseText.innerHTML = "bé heo thít hăm 💓💓💓";
         roseText.classList.add('hidden');
     }
 
